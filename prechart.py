@@ -35,6 +35,9 @@ def ParseIsSuited(x):
 
 
 def PlotHands(df):
+    n_total_hands = df["n"].sum()
+
+
     # All the hands you've ever been dealt at least once
     # hands = [('K', 'Q'), ('A', 'T'), ('A', 'K'), ... ]
     # If offsuit, keep the order of the cards. If suited, switch the order.
@@ -69,7 +72,7 @@ def PlotHands(df):
     ax.invert_xaxis()  # AA at the top left
     ax.axes.xaxis.set_visible(False)  # hide tick marks and axis labels
     ax.axes.yaxis.set_visible(False)  # hide tick marks and axis labels
-    fig.suptitle("Open or 3B frequency", fontsize=20)  # title
+    fig.suptitle("Open or 3B frequency\n({} hands)".format(n_total_hands), fontsize=20)  # title
 
     # Print in each cell: the hand (AA), the raise frequency (100%), and how
     # many times the hand was dealt (5x)
