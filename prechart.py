@@ -2,12 +2,55 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pathlib import Path
+import glob
+from sys import argv
+from ignition import ParsedHandList
+
+## usage: python prechart.py directory_containing_raw_ignition_txt_files
 
 kCARDS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
 kSUITS = ["h", "d", "s", "c"]
 
 
-# Combine two rows into one and summarize suited-offsuit
+# Combine all txt files in raw_data_dir/ into a single outfile
+def ConsolidateRawData(raw_data_dir, outfile="all_data.txt"):
+    with open(outfile, "wb") as o:
+        for infile in Path(raw_data_dir).glob("*.txt"):
+            with open(infile, "rb") as f:
+                o.write(f.read())
+    return outfile
+
+
+# Take a parsed hand list and make one csv for each action: raise, call, fold.
+# Return a dict of csv files {'raise':'raise.csv', ... }.
+def WriteHandsToCSV(parsed_data):
+    csv_files = {}
+    for action_type, hands_for_action in parsed_data.hero_range.items():
+        action_csv_file = "{}.csv".format(action_type.lower())
+        csv_files[action_type.lower()] = action_csv_file
+        with open(action_csv_file, "w+") as f:
+            f.write("card1,card2\n")
+            for i in hands_for_action:
+                f.write(",".join(i) + "\n")
+    return csv_files
+
+
+# Make DF from csv and do initial processing, the result of which is, e.g.:
+# cards | fold
+# 72o   | 9
+# 73o   | 12
+# ...
+def MakeDF(tag, csv):
+    df = pd.read_csv(csv)
+    df["formatted"] = df.apply(lambda row: CombineCards(row), axis=1)
+    return_df = pd.DataFrame(df.formatted.value_counts().reset_index())
+    return_df.columns = ["cards", tag]
+    return_df.set_index("cards", inplace=True, drop=True)
+    return return_df
+
+
+# Combine two cols into one and summarize suited-offsuit
 # card1 | card2
 # '3c'  | 'Jh'   --> 'J3o'
 # '4s'  | '5s'   --> '54s'
@@ -25,8 +68,9 @@ def CombineCards(row):
         return c1 + c2 + "s"
 
 
-# AKs --> (KA) top-right triangle
-# AKo --> (AK) bottom-left triangle
+# If offsuit, change the order of the cards, e.g.
+# AKs --> (KA) shows in top-right triangle
+# AKo --> (AK) shows in bottom-left triangle
 def ParseIsSuited(x):
     if x[2] == "o":
         return (x[0], x[1])
@@ -34,9 +78,34 @@ def ParseIsSuited(x):
         return (x[1], x[0])
 
 
-def PlotHands(df):
-    n_total_hands = df["n"].sum()
+# Turn parsed hands into csv files and then into data frames
+def ProcessData(parsed_hands):
+    # Write each hand list to CSV
+    csv_files = WriteHandsToCSV(parsed_hands)
 
+    # Turn each csv into a df
+    data_frames = [MakeDF(action, file) for action, file in csv_files.items()]
+
+    def CalcRaiseWgt(row):
+        return (row["raise"] / (row["fold"] + row["call"] + row["raise"])).round(4)
+
+    def CalcTotal(row):
+        return int(row["fold"] + row["call"] + row["raise"])
+
+    # Combine into single df and add some info. Result is:
+    # cards | raise | call | fold | raise_freq | N
+    df = pd.concat(data_frames, join="outer", axis=1, sort=False)
+    df.fillna(0, inplace=True)
+    df.index.name = "cards"
+    df["raise_wgt"] = df.apply(lambda row: CalcRaiseWgt(row), axis=1)
+    df["n"] = df.apply(lambda row: CalcTotal(row), axis=1)
+
+    return df
+
+
+# From a specially-formatted data frame, plot your open (raise or 3b) frequency
+def PlotPreOpenChart(df):
+    n_total_hands = df["n"].sum()
 
     # All the hands you've ever been dealt at least once
     # hands = [('K', 'Q'), ('A', 'T'), ('A', 'K'), ... ]
@@ -67,12 +136,14 @@ def PlotHands(df):
     fig, ax = plt.subplots(figsize=(15, 10))  # make a 15x10 size canvas
     h2d = ax.hist2d(
         x, y, bins=[bins_x, bins_y], cmap=plt.cm.Reds, weights=wgts
-    )  # plot!
+    )  # ship it
     fig.colorbar(h2d[3])  # Color scale legend
     ax.invert_xaxis()  # AA at the top left
     ax.axes.xaxis.set_visible(False)  # hide tick marks and axis labels
     ax.axes.yaxis.set_visible(False)  # hide tick marks and axis labels
-    fig.suptitle("Open or 3B frequency\n({} hands)".format(n_total_hands), fontsize=20)  # title
+    fig.suptitle(
+        "Open or 3B frequency\n({} hands)".format(n_total_hands), fontsize=20
+    )  # title
 
     # Print in each cell: the hand (AA), the raise frequency (100%), and how
     # many times the hand was dealt (5x)
@@ -111,42 +182,21 @@ def PlotHands(df):
                 color=color,
             )
 
-    # Display the plot and save it to png
+    # Display and save as png
     plt.show()
     fig.savefig("open_pre.png")
 
 
-def ProcessDF(df, action):
-    df["formatted"] = df.apply(lambda row: CombineCards(row), axis=1)
-    return_df = pd.DataFrame(df.formatted.value_counts().reset_index())
-    return_df.columns = ["cards", action]
-    return_df.set_index("cards", inplace=True, drop=True)
-    return return_df
-
-
 if __name__ == "__main__":
-    # Clean/process the raise, call, fold data
-    dfr = pd.read_csv("raise_pl0_pl3.txt")
-    dfr = ProcessDF(dfr, "raise")
 
-    dfc = pd.read_csv("call_pl0_pl3.txt")
-    dfc = ProcessDF(dfc, "call")
+    # Consolidate all raw ignition txt files located in the indir into one file
+    consolidated_data_file = ConsolidateRawData(argv[1])
 
-    dff = pd.read_csv("fold_pl0_pl3.txt")
-    dff = ProcessDF(dff, "fold")
+    # Parse the hands into lists by action_type
+    h = ParsedHandList(consolidated_data_file)
 
-    def CalcRaiseWgt(row):
-        return (row["raise"] / (row["fold"] + row["call"] + row["raise"])).round(4)
+    # Turn parsed hands into csv files and then into data frames
+    df = ProcessData(h)
 
-    def CalcTotal(row):
-        return int(row["fold"] + row["call"] + row["raise"])
-
-    # Combine data to be of the form
-    # df = cards | raise | call | fold | raise_freq | N
-    df = pd.concat([dfr, dfc, dff], join="outer", axis=1, sort=False)
-    df.fillna(0, inplace=True)
-    df.index.name = "cards"
-    df["raise_wgt"] = df.apply(lambda row: CalcRaiseWgt(row), axis=1)
-    df["n"] = df.apply(lambda row: CalcTotal(row), axis=1)
-
-    PlotHands(df)
+    # Plot!
+    PlotPreOpenChart(df)
