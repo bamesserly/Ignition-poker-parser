@@ -59,7 +59,8 @@ class BettingRound:
                   or 'Table deposit' in L
                   or 'Seat stand' in L
                   or 'Table enter user' in L
-                  or 'Table leave user' in L):
+                  or 'Table leave user' in L
+                  or 'Seat re-join' in L):
                 continue
             elif ' : ' in L:
                 self.actions.append(L)
@@ -86,6 +87,7 @@ class BettingRound:
                     elif 'Folds' in a:
                         if self.action_n == 1:
                             self.hero_first = 'Fold'
+
     def __repr__(self):
         return str(self.__dict__)
 
@@ -101,8 +103,7 @@ class Hand:
         ## step 2: split each hand into segments
         s = string.split('\n*** ')
         while s:
-            # Not known whether flop, turn, riv, or summary is in
-            # there.
+            # Not known whether flop, turn, riv, or summary is in there.
             ## step 3: split each segment into lines
             v = s.pop(0).splitlines()
             if 'Hand #' in v[0]:
@@ -123,8 +124,10 @@ class Hand:
         ## step 4: parse various elements at sub-line level
         match = _hand_num_re.match(self.seats[0])
         self.hand_number = int(match.group(1))
+
     def __repr__(self):
         return str(self.__dict__)
+
     def __getitem__(self, i):
         keys_ordered = "seats preflop flop turn river summary".split()
         return self.__dict__[keys_ordered[i]]
@@ -160,6 +163,7 @@ class ParsedHandList:
         self.n_hands = len(self.hand_list)
         self.vpip = float(self.calls_raises) / self.n
         self.pfr = float(self.raises) / self.n
+
     def __repr__(self):
         R = ''
         for x in self.hand_list:
@@ -169,5 +173,6 @@ class ParsedHandList:
                     R += (a + '\n')
             R += '\n'
         return R
+
     def __getitem__(self, i):
         return self.hand_list[i]
