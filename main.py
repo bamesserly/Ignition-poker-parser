@@ -1,3 +1,18 @@
+################################################################################
+# Main executable for the ignition poker parsing package
+# input: directory of ignition hand history data files
+# output: vpip, pfr, and pre-flop open chart
+#
+# More specifically this script does:
+# 1. Gets location directory of ignition hand history files (put all files in
+# one directory).
+# 2. Concatenates input files into one big file for easier parsing.
+# 3. Parses them with the parsing code found in ignition.py.
+# 4. Calculates, prints, and saves in a logfile the vpip and pfr.
+# 5. Plots and saves the open pre chart.
+#
+# Usage: python main.py input_dir
+################################################################################
 from ignition import ParsedHandList
 from prechart import ConsolidateRawData, ProcessData, PlotPreOpenChart
 from summarize import Summarize
