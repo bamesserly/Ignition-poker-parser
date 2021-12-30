@@ -1,9 +1,12 @@
+################################################################################
+# Return the vpip and pfr from a single ignition hand history data file
+# Usage: python summarize.py my_logfile.txt
+################################################################################
 from ignition import ParsedHandList
 from pprint import pformat
 from sys import argv, exit
 import logging
 
-## usage: python summarize.py example_ignition.txt
 
 def SetupLogger(name="root"):
     shandler = logging.StreamHandler()
