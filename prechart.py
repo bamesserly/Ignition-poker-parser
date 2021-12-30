@@ -1,4 +1,13 @@
-# libraries
+################################################################################
+# From a directory containing ignition hand history files, create a png chart
+# showing your open/3b preflop frequencies.
+#
+# input: directory of ignition hand history data files
+#
+# Uses the parsing functionality of ignition.py. Passes parsed hands to pandas.
+#
+# usage: python prechart.py directory_containing_raw_ignition_txt_files
+################################################################################
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -7,14 +16,13 @@ import glob
 from sys import argv
 from ignition import ParsedHandList
 
-## usage: python prechart.py directory_containing_raw_ignition_txt_files
 
 kCARDS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
 kSUITS = ["h", "d", "s", "c"]
 
 
 # Combine all txt files in raw_data_dir/ into a single outfile
-def ConsolidateRawData(raw_data_dir, outfile="all_data.txt"):
+def ConsolidateRawData(raw_data_dir, outfile="cache/all_data.txt"):
     with open(outfile, "wb") as o:
         for infile in Path(raw_data_dir).glob("*.txt"):
             with open(infile, "rb") as f:
@@ -27,7 +35,7 @@ def ConsolidateRawData(raw_data_dir, outfile="all_data.txt"):
 def WriteHandsToCSV(parsed_data):
     csv_files = {}
     for action_type, hands_for_action in parsed_data.hero_range.items():
-        action_csv_file = "{}.csv".format(action_type.lower())
+        action_csv_file = "cache/{}.csv".format(action_type.lower())
         csv_files[action_type.lower()] = action_csv_file
         with open(action_csv_file, "w+") as f:
             f.write("card1,card2\n")
@@ -103,56 +111,35 @@ def ProcessData(parsed_hands):
     return df
 
 
-# From a specially-formatted data frame, plot your open (raise or 3b) frequency
-def PlotPreOpenChart(df):
-    n_total_hands = df["n"].sum()
-
+# Make one list for first hole cards (x-axis), another list for second hole
+# card (y-axis).
+# x > y --> suited
+# y > x --> offsuit
+def GetListsOfHoleCards(df):
     # All the hands you've ever been dealt at least once
     # hands = [('K', 'Q'), ('A', 'T'), ('A', 'K'), ... ]
     # If offsuit, keep the order of the cards. If suited, switch the order.
     # This is how we place suited in top right and off suit in bottom left.
-    hands = [ParseIsSuited(x) for x in df.index]
+    hands = [ParseIsSuited(i) for i in df.index]
 
-    # Make one list for first hole cards (x-axis), andother list for second
-    # hole card (y-axis).
     # Convert cards to numbers (e.g. '2' --> 0, 'A' --> 13) for plotting
-    # x > y --> suited
-    # y > x --> offsuit
     x = [i[0] for i in hands]
     x = [kCARDS.index(i) for i in x]
     y = [i[1] for i in hands]
     y = [kCARDS.index(i) for i in y]
 
-    # Cell content is the raise_frequency
-    wgts = df["raise_wgt"].to_list()
+    return x, y
 
-    # Map each card combo to how many times that combo was dealt.
-    # e.g. hole_cards_dealt = { (12,12) : 5 } means AA dealt 5 times ever
-    n_times_dealt = df["n"].to_list()
-    hole_cards_dealt = dict(zip(tuple(zip(x, y)), n_times_dealt))
 
-    # Plot
-    bins_x = bins_y = np.arange(0, len(kCARDS) + 1)  # 13 bins, 1 for each card
-    fig, ax = plt.subplots(figsize=(15, 10))  # make a 15x10 size canvas
-    h2d = ax.hist2d(
-        x, y, bins=[bins_x, bins_y], cmap=plt.cm.Reds, weights=wgts
-    )  # ship it
-    fig.colorbar(h2d[3])  # Color scale legend
-    ax.invert_xaxis()  # AA at the top left
-    ax.axes.xaxis.set_visible(False)  # hide tick marks and axis labels
-    ax.axes.yaxis.set_visible(False)  # hide tick marks and axis labels
-    fig.suptitle(
-        "Open or 3B frequency\n({} hands)".format(n_total_hands), fontsize=20
-    )  # title
-
-    # Print in each cell: the hand (AA), the raise frequency (100%), and how
-    # many times the hand was dealt (5x)
-    counts = h2d[0]
+# Add text to each cell: the hand (e.g. AA), the raise frequency (e.g.  97.9%),
+# and how many times the hand was dealt (e.g. 5 times)
+def AddTextToCells(h2d, hole_cards_dealt, bins_x, bins_y):
+    counts = h2d[0] # 2d matrix of number of entries in each bin
     for i in range(counts.shape[0]):
         for j in range(counts.shape[1]):
-            c = counts[i, j]
-            c = (c * 100.).round(1)  # make it a percent
-            color = "white" if c > 25 else "black"
+            cell_count = counts[i, j]
+            cell_count = (cell_count * 100.).round(1)  # make it a percent
+            txt_color = "white" if cell_count > 25 else "black" # making txt visible on background color
             lbl = ""
 
             # Number of times this hand has been dealt.
@@ -166,11 +153,11 @@ def PlotPreOpenChart(df):
             # "s" in the top right, "o" in bottom left, and nothing along the
             # diagonal
             if i > j:
-                lbl = "{0}{1}o\n{2}%\n({3})".format(kCARDS[i], kCARDS[j], c, N)
+                lbl = "{0}{1}o\n{2}%\n({3})".format(kCARDS[i], kCARDS[j], cell_count, N)
             elif i == j:
-                lbl = "{0}{1}\n{2}%\n({3})".format(kCARDS[i], kCARDS[j], c, N)
+                lbl = "{0}{1}\n{2}%\n({3})".format(kCARDS[i], kCARDS[j], cell_count, N)
             else:
-                lbl = "{0}{1}s\n{2}%\n({3})".format(kCARDS[j], kCARDS[i], c, N)
+                lbl = "{0}{1}s\n{2}%\n({3})".format(kCARDS[j], kCARDS[i], cell_count, N)
 
             # Add the text to the cell
             plt.text(
@@ -179,12 +166,43 @@ def PlotPreOpenChart(df):
                 lbl,
                 ha="center",
                 va="center",
-                color=color,
+                color=txt_color,
             )
+
+
+# From a specially-formatted data frame, plot your open (raise or 3b) frequency
+def PlotPreOpenChart(df):
+    x_vals, y_vals = GetListsOfHoleCards(df)
+
+    # Cell content is the raise_frequency
+    z_vals = df["raise_wgt"].to_list()
+
+    # Map each card combo to how many times that combo was dealt.
+    # e.g. hole_cards_dealt = { (12,12) : 5, (12,11) : 9, ... } means AA dealt
+    # 5 times ever, and AK suited dealt 9 times.
+    n_times_dealt = df["n"].to_list()
+    hole_cards_dealt = dict(zip(tuple(zip(x_vals, y_vals)), n_times_dealt))
+
+    # Plot
+    bins_x = bins_y = np.arange(0, len(kCARDS) + 1)  # 13 bins, 1 for each card
+    fig, ax = plt.subplots(figsize=(15, 10))  # make a 15x10 size canvas
+    h2d = ax.hist2d(
+        x_vals, y_vals, bins=[bins_x, bins_y], cmap=plt.cm.Reds, weights=z_vals
+    )  # ship it
+    fig.colorbar(h2d[3])  # Color scale legend
+    ax.invert_xaxis()  # AA at the top left
+    ax.axes.xaxis.set_visible(False)  # hide tick marks and axis labels
+    ax.axes.yaxis.set_visible(False)  # hide tick marks and axis labels
+
+    n_total_hands = df["n"].sum()
+    fig.suptitle(f"Open or 3B frequency\n({n_total_hands} hands)", fontsize=20)
+
+    # The hand, raise freq, and number of times dealt
+    AddTextToCells(h2d, hole_cards_dealt, bins_x, bins_y)
 
     # Display and save as png
     plt.show()
-    fig.savefig("open_pre.png")
+    fig.savefig("cache/open_pre.png")
 
 
 if __name__ == "__main__":
