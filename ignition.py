@@ -60,7 +60,10 @@ class BettingRound:
                   or 'Seat stand' in L
                   or 'Table enter user' in L
                   or 'Table leave user' in L
-                  or 'Seat re-join' in L):
+                  or 'Seat re-join' in L
+                  or 'Seat sit out' in L
+                  or 'Enter(Auto)' in L
+                  or 'Leave(Auto)' in L):
                 continue
             elif ' : ' in L:
                 self.actions.append(L)
@@ -154,7 +157,12 @@ class ParsedHandList:
         self.n = 0
         self.hero_range = {'Raise':[], 'Call':[], 'Fold':[]}
         for x in self.hand_list:
-            self.calls_raises += (x.preflop.call_n + x.preflop.raise_n)
+            try:
+                self.calls_raises += (x.preflop.call_n + x.preflop.raise_n)
+            except AttributeError as e:
+                print(e)
+                print(x)
+                continue
             self.raises += x.preflop.raise_n
             self.n += x.preflop.action_n
             for k in self.hero_range.keys():
@@ -167,7 +175,10 @@ class ParsedHandList:
     def __repr__(self):
         R = ''
         for x in self.hand_list:
-            R += '{} (#{})\n'.format(x.preflop.cards.hero, x.hand_number)
+            try:
+                R += '{} (#{})\n'.format(x.preflop.cards.hero, x.hand_number)
+            except:
+                continue
             for a in x.preflop.actions:
                 if '[ME]' in a:
                     R += (a + '\n')
@@ -176,3 +187,37 @@ class ParsedHandList:
 
     def __getitem__(self, i):
         return self.hand_list[i]
+
+
+# TODO
+# parser fails with this hand
+'''
+Ignition Hand #4218132181 TBL#25648592 HOLDEM No Limit - 2021-12-28 07:53:59
+Seat 1: Dealer [ME] ($9.89 in chips)
+Seat 6: Big Blind ($10 in chips)
+Dealer  [ME] : Set dealer [1]
+Dealer  [ME] : Small Blind $0.05
+Big Blind : Seat sit out
+Dealer  [ME] : Return uncalled blind $0.05
+Big Blind : Seat stand
+Big Blind : Table leave user
+Dealer  [ME] : Seat stand
+Dealer  [ME] : Table leave user
+*** SUMMARY ***
+'''
+# and this one (looks like for the same reason)
+'''Ignition Hand #4215385853 TBL#25612338 HOLDEM No Limit - 2021-12-22 16:27:52
+Seat 2: Dealer [ME] ($9.90 in chips)
+Seat 6: Big Blind ($2.65 in chips)
+Dealer  [ME] : Set dealer [2]
+Dealer  [ME] : Small Blind $0.05
+Big Blind : Seat sit out
+Dealer  [ME] : Return uncalled blind $0.05
+Big Blind : Seat stand
+Big Blind : Table leave user
+Seat stand
+Table leave user
+Dealer  [ME] : Seat stand
+Dealer  [ME] : Table leave user
+*** SUMMARY ***
+'''

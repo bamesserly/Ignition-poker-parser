@@ -97,6 +97,9 @@ def ProcessData(parsed_hands):
     def CalcRaiseWgt(row):
         return (row["raise"] / (row["fold"] + row["call"] + row["raise"])).round(4)
 
+    def CalcCallWgt(row):
+        return (row["call"] / (row["fold"] + row["call"] + row["raise"])).round(4)
+
     def CalcTotal(row):
         return int(row["fold"] + row["call"] + row["raise"])
 
@@ -106,6 +109,7 @@ def ProcessData(parsed_hands):
     df.fillna(0, inplace=True)
     df.index.name = "cards"
     df["raise_wgt"] = df.apply(lambda row: CalcRaiseWgt(row), axis=1)
+    df["call_wgt"] = df.apply(lambda row: CalcCallWgt(row), axis=1)
     df["n"] = df.apply(lambda row: CalcTotal(row), axis=1)
 
     return df
@@ -175,7 +179,8 @@ def PlotPreOpenChart(df):
     x_vals, y_vals = GetListsOfHoleCards(df)
 
     # Cell content is the raise_frequency
-    z_vals = df["raise_wgt"].to_list()
+    #z_vals = df["raise_wgt"].to_list()
+    z_vals = df["call_wgt"].to_list()
 
     # Map each card combo to how many times that combo was dealt.
     # e.g. hole_cards_dealt = { (12,12) : 5, (12,11) : 9, ... } means AA dealt
@@ -195,14 +200,16 @@ def PlotPreOpenChart(df):
     ax.axes.yaxis.set_visible(False)  # hide tick marks and axis labels
 
     n_total_hands = df["n"].sum()
-    fig.suptitle(f"Open or 3B frequency\n({n_total_hands} hands)", fontsize=20)
+    #fig.suptitle(f"Open or 3B frequency\n({n_total_hands} hands)", fontsize=20)
+    fig.suptitle(f"Call pre frequency\n({n_total_hands} hands)", fontsize=20)
 
     # The hand, raise freq, and number of times dealt
     AddTextToCells(h2d, hole_cards_dealt, bins_x, bins_y)
 
     # Display and save as png
     plt.show()
-    fig.savefig("cache/open_pre.png")
+    #fig.savefig("cache/open_pre.png")
+    fig.savefig("cache/call_pre.png")
 
 
 if __name__ == "__main__":
